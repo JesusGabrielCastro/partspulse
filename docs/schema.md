@@ -1,6 +1,6 @@
-# Esquema de datos
+# Data schema
 
-## Entidades
+## Entities
 
 ```
 users                       suppliers
@@ -19,60 +19,58 @@ name                                 part_id                FK → parts (RESTRI
 sku               UNIQUE             requested_by           FK → users
 current_stock     >= 0               approved_by            FK → users (nullable)
 reorder_threshold >= 0               quantity               > 0
-unit_price        > 0                status                 enum, indexado
+unit_price        > 0                status                 enum, indexed
 supplier_id       FK → suppliers     unit_price_at_request  snapshot
 created_at / updated_at              currency_code          snapshot
                                       created_at / updated_at
 ```
 
-## Constraints relevantes
+## Relevant constraints
 
 - `CHECK (current_stock >= 0)`, `CHECK (reorder_threshold >= 0)`,
-  `CHECK (unit_price > 0)` en `parts`.
-- `CHECK (quantity > 0)` en `purchase_orders`.
-- `UNIQUE` en `parts.sku` y `users.email`.
-- `FOREIGN KEY parts.supplier_id ... ON DELETE RESTRICT` — borrar un
-  proveedor con parts asociados falla a nivel de base de datos (y se
-  intercepta antes en el servicio con un `409` claro).
+  `CHECK (unit_price > 0)` on `parts`.
+- `CHECK (quantity > 0)` on `purchase_orders`.
+- `UNIQUE` on `parts.sku` and `users.email`.
+- `FOREIGN KEY parts.supplier_id ... ON DELETE RESTRICT` — deleting a
+  supplier with parts attached fails at the database level (and is
+  intercepted earlier in the service with a clear `409`).
 
-## Índices
+## Indexes
 
-- **`idx_purchase_orders_status`** (columna `status`, `index=True` en el
-  modelo). Es el índice significativo de este esquema: soporta dos consultas
-  reales de la aplicación —
-  - `GET /api/purchase-orders?status=REQUESTED` (filtro de la lista de POs)
-  - el conteo de "aprobaciones pendientes" del dashboard:
+- **`idx_purchase_orders_status`** (column `status`, `index=True` in the
+  model). This is the significant index in this schema: it backs two real
+  application queries —
+  - `GET /api/purchase-orders?status=REQUESTED` (the PO list filter)
+  - the dashboard's "pending approvals" count:
     `SELECT count(*) FROM purchase_orders WHERE status = 'REQUESTED'`
-- `idx_parts_supplier_id` — acelera el join/filtro de parts por proveedor.
-- Único en `parts.sku` (`idx_parts_sku`) y `users.email` (`idx_users_email`).
+- `idx_parts_supplier_id` — speeds up the join/filter of parts by supplier.
+- Unique on `parts.sku` (`idx_parts_sku`) and `users.email` (`idx_users_email`).
 
-### Nota sobre el filtro low-stock
+### Note on the low-stock filter
 
-El filtro `?low_stock=true` traduce a
-`WHERE current_stock <= reorder_threshold` — una comparación entre dos
-columnas de la misma fila. Un índice B-tree simple sobre una sola columna no
-acelera esa condición. En Postgres, la forma correcta de resolverlo sería un
-**índice parcial** (si el umbral fuera relativamente estable) o una
-**columna generada** (`GENERATED ALWAYS AS (current_stock <= reorder_threshold) STORED`)
-con su propio índice. No se implementó por alcance de tiempo — la tabla de
-~25 partes de la demo no lo necesita — pero es la respuesta correcta si el
-dataset creciera.
+The `?low_stock=true` filter translates to
+`WHERE current_stock <= reorder_threshold` — a comparison between two
+columns of the same row. A simple single-column B-tree index doesn't speed
+up that condition. In Postgres, the correct way to solve it would be a
+**partial index** (if the threshold were relatively stable) or a
+**generated column** (`GENERATED ALWAYS AS (current_stock <= reorder_threshold) STORED`)
+with its own index. Not implemented due to time scope — the demo's ~25-part
+table doesn't need it — but it's the right answer if the dataset grew.
 
-## Trabajo futuro: histórico de stock
+## Future work: stock history
 
-Para trazar el historial de cambios de stock (motivo: ajuste manual, PO
-recibida, etc.) la forma correcta es una tabla nueva, no más columnas en
-`parts`:
+To trace stock change history (reason: manual adjustment, PO received,
+etc.) the right approach is a new table, not more columns on `parts`:
 
 ```
 stock_movements
 ────────────────
 id          PK
 part_id     FK → parts
-delta       int (positivo o negativo)
+delta       int (positive or negative)
 reason      text
 po_id       FK → purchase_orders (nullable)
 created_at
 ```
 
-No implementada en esta entrega; queda documentada como diseño pensado.
+Not implemented in this submission; documented as a thought-out design.

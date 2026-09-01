@@ -1,68 +1,69 @@
-# Arquitectura
+# Architecture
 
 ```
-React (UI, roles, estados)
+React (UI, roles, states)
    ↓ REST + JWT
-FastAPI (validación, RBAC, lógica de negocio)
-   ↓ SQLAlchemy                ↘ cliente HTTP aislado
-SQLite / PostgreSQL              Frankfurter (tipos de cambio)
+FastAPI (validation, RBAC, business logic)
+   ↓ SQLAlchemy                ↘ isolated HTTP client
+SQLite / PostgreSQL              Frankfurter (exchange rates)
 ```
 
-## Dónde vive cada responsabilidad (backend)
+## Where each responsibility lives (backend)
 
-| Responsabilidad | Ubicación |
+| Responsibility | Location |
 |---|---|
-| Esquema / entidades | `app/models/__init__.py` |
-| Validación de entrada/salida | `app/schemas/__init__.py` (Pydantic) |
-| Autenticación (JWT, bcrypt) | `app/core/security.py` |
-| RBAC (dependencias `get_current_user`, `require_admin`) | `app/core/deps.py` |
-| Low-stock (única fuente de verdad) | `app/services/inventory_service.py` |
-| Máquina de estados de purchase orders | `app/services/purchase_order_service.py` |
-| Cliente HTTP externo aislado (Frankfurter) | `app/clients/exchange_rate_client.py` |
-| Routers HTTP (sin lógica de negocio) | `app/api/*.py` |
-| Config por entorno | `app/core/config.py` (pydantic-settings) |
-| Manejo de errores uniforme | `app/main.py` (exception handlers → `{"error": {...}}`) |
+| Schema / entities | `app/models/__init__.py` |
+| Input/output validation | `app/schemas/__init__.py` (Pydantic) |
+| Authentication (JWT, bcrypt) | `app/core/security.py` |
+| RBAC (`get_current_user`, `require_admin` dependencies) | `app/core/deps.py` |
+| Low-stock (single source of truth) | `app/services/inventory_service.py` |
+| Purchase order state machine | `app/services/purchase_order_service.py` |
+| Isolated external HTTP client (Frankfurter) | `app/clients/exchange_rate_client.py` |
+| HTTP routers (no business logic) | `app/api/*.py` |
+| Environment config | `app/core/config.py` (pydantic-settings) |
+| Uniform error handling | `app/main.py` (exception handlers → `{"error": {...}}`) |
 
-## Por qué el cliente de tipos de cambio está separado de `api/`
+## Why the exchange rate client is separate from `api/`
 
-`app/clients/exchange_rate_client.py` es el único módulo que sabe que existe
-Frankfurter. Nunca se importa `httpx` en un router. El router de dashboard
-(`app/api/dashboard.py`) llama a `exchange_rate_client.get_rate(...)` y
-recibe un objeto con un `Decimal` y un enum de estado — nada de la forma de
-la respuesta HTTP cruda se filtra hacia arriba. Esto permite:
+`app/clients/exchange_rate_client.py` is the only module aware that
+Frankfurter exists. `httpx` is never imported in a router. The dashboard
+router (`app/api/dashboard.py`) calls `exchange_rate_client.get_rate(...)`
+and gets back an object with a `Decimal` and a status enum — nothing about
+the shape of the raw HTTP response leaks upward. This allows:
 
-- Cambiar de proveedor de tasas de cambio sin tocar routers ni servicios.
-- Testear el fallback mockeando un único punto (`httpx.get`) sin acoplar el
-  test a rutas HTTP.
-- Que una caída de la API externa nunca se propague como una excepción no
-  controlada hacia el cliente — el peor caso posible es
-  `conversion_status: "UNAVAILABLE"`, nunca un 500.
+- Switching exchange rate providers without touching routers or services.
+- Testing the fallback by mocking a single point (`httpx.get`) without
+  coupling the test to HTTP routes.
+- An external API outage never propagating as an uncontrolled exception up
+  to the client — the worst possible case is
+  `conversion_status: "UNAVAILABLE"`, never a 500.
 
-## RBAC: dónde se aplica
+## RBAC: where it's enforced
 
-Toda autorización vive en el backend, nunca solo en el frontend:
+All authorization lives in the backend, never only in the frontend:
 
-- `get_current_user` (dependency): exige un JWT válido → 401 si falta o es
-  inválido.
-- `require_admin` (dependency): exige rol admin → 403 si el usuario está
-  autenticado pero no es admin.
-- Regla de dominio adicional en `app/api/purchase_orders.py::approve_purchase_order`:
-  un usuario no puede aprobar su propia solicitud, incluso siendo admin.
+- `get_current_user` (dependency): requires a valid JWT → 401 if missing or
+  invalid.
+- `require_admin` (dependency): requires the admin role → 403 if the user
+  is authenticated but not an admin.
+- Additional domain rule in
+  `app/api/purchase_orders.py::approve_purchase_order`: a user can't approve
+  their own request, even as admin.
 
-El frontend oculta la UI de administración para el rol `staff`
-(`user?.role === "admin"` en las páginas), pero eso es exclusivamente UX —
-la seguridad real está en que los endpoints devuelven 403 sin importar lo
-que envíe el cliente.
+The frontend hides admin UI for the `staff` role
+(`user?.role === "admin"` in the pages), but that's UX only — the real
+security is that the endpoints return 403 regardless of what the client
+sends.
 
-## Errores: forma uniforme
+## Errors: uniform shape
 
-Toda respuesta de error de la API sigue la misma forma, definida en
-`app/main.py` vía exception handlers:
+Every API error response follows the same shape, defined in `app/main.py`
+via exception handlers:
 
 ```json
 { "error": { "code": "ILLEGAL_TRANSITION", "message": "...", "details": [] } }
 ```
 
-Códigos HTTP usados con consistencia: `400/422` validación,
-`401` no autenticado, `403` autenticado sin permiso, `404` no existe,
-`409` conflicto de estado o de FK, `500` interno sin stack trace expuesto.
+HTTP codes used consistently: `400/422` validation, `401` not authenticated,
+`403` authenticated without permission, `404` not found, `409` state or FK
+conflict, `500` internal without an exposed stack trace.

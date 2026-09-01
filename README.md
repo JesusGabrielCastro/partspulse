@@ -1,33 +1,32 @@
 # PartsPulse
 
-Sistema de inventario y compras para equipos de operaciones que gestionan
-repuestos comprados a proveedores en distintas monedas. Detecta bajo stock,
-gestiona el ciclo de vida de las órdenes de compra con una máquina de estados,
-y muestra el gasto total convertido a una moneda base usando tasas de cambio
-reales.
+Inventory and purchasing system for operations teams that manage spare parts
+bought from suppliers billing in different currencies. It flags low stock,
+manages the purchase order lifecycle through an explicit state machine, and
+shows total spend converted to a base currency using real exchange rates.
 
-Prueba técnica — Nova IoT Systems.
+Technical assessment — Nova IoT Systems.
 
 ## Stack
 
-| Capa | Tecnología |
+| Layer | Technology |
 |---|---|
 | Backend | Python 3.11 + FastAPI |
-| ORM / migraciones | SQLAlchemy 2.x + Alembic |
-| Base de datos | SQLite por defecto (cero setup) — Postgres soportado vía Docker |
+| ORM / migrations | SQLAlchemy 2.x + Alembic |
+| Database | SQLite by default (zero setup) — Postgres supported via Docker |
 | Auth | JWT (python-jose) + bcrypt (passlib) |
 | Frontend | React 19 + Vite + TypeScript |
-| Estilos | Tailwind CSS 4 |
-| Gráficas | Recharts |
+| Styling | Tailwind CSS 4 |
+| Charts | Recharts |
 | Tests | pytest + httpx (TestClient) |
-| API externa | [Frankfurter](https://www.frankfurter.app/) (tasas de cambio, sin API key) |
+| External API | [Frankfurter](https://www.frankfurter.app/) (exchange rates, no API key) |
 
-## Arranque rápido
+## Quick start
 
-### Requisitos
+### Requirements
 - Python 3.11+
 - Node 20+
-- (Opcional) Docker Desktop, si querés Postgres en lugar de SQLite
+- (Optional) Docker Desktop, if you want Postgres instead of SQLite
 
 ### Backend
 
@@ -38,18 +37,18 @@ python -m venv .venv
 # source .venv/bin/activate     # macOS/Linux
 pip install -r requirements.txt
 
-cp .env.example .env            # por defecto usa SQLite, funciona sin tocar nada
+cp .env.example .env            # defaults to SQLite, works out of the box
 
-python -m alembic upgrade head  # crea el esquema
-python -m app.seed              # datos de demo (usuarios, proveedores, parts)
+python -m alembic upgrade head  # creates the schema
+python -m app.seed              # demo data (users, suppliers, parts)
 
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-Backend disponible en `http://localhost:8000`. Swagger interactivo en
+Backend available at `http://localhost:8000`. Interactive Swagger docs at
 `http://localhost:8000/docs`.
 
-Usuarios sembrados:
+Seeded users:
 - `admin@partspulse.io` / `Admin123!`
 - `staff@partspulse.io` / `Staff123!`
 
@@ -58,23 +57,23 @@ Usuarios sembrados:
 ```bash
 cd frontend
 npm install
-cp .env.example .env            # apunta a http://localhost:8000 por defecto
+cp .env.example .env            # points to http://localhost:8000 by default
 npm run dev
 ```
 
-Frontend disponible en `http://localhost:5173`.
+Frontend available at `http://localhost:5173`.
 
-### Usar Postgres en vez de SQLite (opcional)
+### Using Postgres instead of SQLite (optional)
 
 ```bash
 docker compose up -d
 ```
 
-Y en `backend/.env` cambiá:
+Then in `backend/.env` change:
 ```
 DATABASE_URL=postgresql+psycopg2://partspulse:partspulse@localhost:5432/partspulse
 ```
-Luego corré `python -m alembic upgrade head` de nuevo apuntando a Postgres.
+Then run `python -m alembic upgrade head` again pointing at Postgres.
 
 ### Tests
 
@@ -83,117 +82,120 @@ cd backend
 python -m pytest -q
 ```
 
-13 tests: lógica de negocio (low-stock, máquina de estados), integración de
-API (RBAC, ciclo completo de PO), y fallback de la integración externa.
+13 tests: business logic (low-stock, state machine), API integration
+(RBAC, full PO lifecycle), and external integration fallback.
 
-## Arquitectura
+## Architecture
 
 ```
-React (UI, roles, estados)
+React (UI, roles, states)
    ↓ REST + JWT
-FastAPI (validación, RBAC, lógica de negocio)
-   ↓ SQLAlchemy              ↘ cliente HTTP aislado (app/clients/)
-SQLite / PostgreSQL             Frankfurter (tasas de cambio)
+FastAPI (validation, RBAC, business logic)
+   ↓ SQLAlchemy              ↘ isolated HTTP client (app/clients/)
+SQLite / PostgreSQL             Frankfurter (exchange rates)
 ```
 
-Capas del backend:
-- `app/models/` — SQLAlchemy, fuente de verdad del esquema.
-- `app/schemas/` — Pydantic, validación de entrada/salida.
-- `app/api/` — routers HTTP, sin lógica de negocio.
-- `app/services/` — lógica de negocio pura (low-stock, máquina de estados de PO).
-- `app/clients/` — clientes de APIs externas, aislados; nunca se importan
-  desde `api/` directamente sin pasar antes por `services/` o el propio cliente.
-- `app/core/` — config, seguridad (JWT/bcrypt), dependencias de auth/RBAC.
+Backend layers:
+- `app/models/` — SQLAlchemy, source of truth for the schema.
+- `app/schemas/` — Pydantic, input/output validation.
+- `app/api/` — HTTP routers, no business logic.
+- `app/services/` — pure business logic (low-stock, PO state machine).
+- `app/clients/` — isolated external API clients; never imported directly
+  from `api/` without going through `services/` or the client itself.
+- `app/core/` — config, security (JWT/bcrypt), auth/RBAC dependencies.
 
 Frontend:
-- `src/api/` — único lugar que llama al backend (axios con interceptor de 401).
-- `src/auth/` — contexto de sesión y guards de ruta.
-- `src/pages/` — una página por ruta, sin lógica de negocio de servidor.
+- `src/api/` — the only place that calls the backend (axios with a 401
+  interceptor).
+- `src/auth/` — session context and route guards.
+- `src/pages/` — one page per route, no server-side business logic.
 
-## Modelo de datos y decisiones
+## Data model and decisions
 
-Ver [`docs/schema.md`](docs/schema.md) para el diagrama de entidades,
-constraints, e índices documentados con su consulta.
+See [`docs/schema.md`](docs/schema.md) for the entity diagram, constraints,
+and indexes documented with their query.
 
-Decisiones clave:
+Key decisions:
 
-1. **`is_low_stock` nunca es una columna.** Se calcula en cada lectura
-   (`current_stock <= reorder_threshold`), en `app/services/inventory_service.py`.
-   Así nunca puede desincronizarse del stock real.
-2. **Snapshot de precio y moneda en la orden de compra.** `unit_price_at_request`
-   y `currency_code` se copian del part al momento de crear la PO. Si el
-   proveedor cambia el precio después, las órdenes históricas no se alteran.
-3. **`ON DELETE RESTRICT` en `parts.supplier_id`.** Borrar un proveedor con
-   repuestos asociados devuelve `409 SUPPLIER_HAS_PARTS`, nunca borra en cascada.
-4. **Máquina de estados explícita** para purchase orders
-   (`app/services/purchase_order_service.py`), validada en el servicio — nunca
-   se confía en un status que venga del cliente.
-5. **Un usuario no puede aprobar su propia solicitud de compra**, ni siquiera
-   siendo admin — regla de negocio aplicada en el endpoint de aprobación.
+1. **`is_low_stock` is never a column.** It's computed on every read
+   (`current_stock <= reorder_threshold`) in `app/services/inventory_service.py`.
+   That way it can never drift from the actual stock.
+2. **Price and currency snapshot on the purchase order.** `unit_price_at_request`
+   and `currency_code` are copied from the part when the PO is created. If the
+   supplier raises the price later, historical orders don't change.
+3. **`ON DELETE RESTRICT` on `parts.supplier_id`.** Deleting a supplier with
+   parts attached returns `409 SUPPLIER_HAS_PARTS`, never a cascade delete.
+4. **Explicit state machine** for purchase orders
+   (`app/services/purchase_order_service.py`), validated in the service — a
+   status coming from the client is never trusted.
+5. **A user can't approve their own purchase request**, even as admin —
+   business rule enforced in the approval endpoint.
 
-## Integración de tipos de cambio
+## Exchange rate integration
 
-Módulo aislado: `backend/app/clients/exchange_rate_client.py`. Ningún router
-ni servicio de negocio conoce el formato de respuesta de Frankfurter — el
-cliente devuelve un `Decimal` y un estado (`LIVE` / `CACHED` / `UNAVAILABLE`),
-nunca el dict crudo de la API.
+Isolated module: `backend/app/clients/exchange_rate_client.py`. No router or
+business service knows the shape of Frankfurter's response — the client
+returns a `Decimal` and a status (`LIVE` / `CACHED` / `UNAVAILABLE`), never
+the raw API dict.
 
-**Por qué Frankfurter y no otra API con key:** no requiere autenticación, es
-estable, y el formato es simple — permite dedicar el tiempo disponible a la
-arquitectura del cliente en vez de a gestionar secretos. La arquitectura
-(cliente aislado, config por variable de entorno `EXCHANGE_API_BASE_URL`)
-soportaría una API con key cambiando solo ese módulo, sin tocar el resto del
-sistema.
+**Why Frankfurter and not a key-based API:** it needs no authentication, is
+stable, and the format is simple — this let the available time go into the
+client's architecture instead of secret management. The architecture
+(isolated client, config via the `EXCHANGE_API_BASE_URL` env var) would
+support a key-based API by changing only that module, with no changes
+elsewhere in the system.
 
-**Comportamiento:**
-1. Timeout explícito de 4s (configurable por env).
-2. Caché en memoria con TTL de 1h por par de monedas.
-3. Fallback en cascada: caché viva → última tasa conocida aunque esté vencida
-   → sin conversión (`UNAVAILABLE`).
-4. `GET /api/dashboard/summary` siempre responde `200`, incluso si la API
-   externa está caída — nunca rompe el dashboard.
-5. El frontend muestra un badge discreto si `conversion_status` es `CACHED`,
-   y si es `UNAVAILABLE` indica que la conversión no está disponible.
+**Behavior:**
+1. Explicit 4s timeout (configurable via env).
+2. In-memory cache with a 1h TTL per currency pair.
+3. Cascading fallback: live cache → last known rate even if stale →
+   no conversion (`UNAVAILABLE`).
+4. `GET /api/dashboard/summary` always responds `200`, even if the external
+   API is down — it never breaks the dashboard.
+5. The frontend shows a discreet badge when `conversion_status` is `CACHED`,
+   and when it's `UNAVAILABLE` it indicates conversion isn't available.
 
-Para forzar el fallback en una demo: cambiar `EXCHANGE_API_BASE_URL` en
-`.env` a una URL inválida y reiniciar el backend, o cortar la red un momento.
+To force the fallback in a demo: change `EXCHANGE_API_BASE_URL` in `.env` to
+an invalid URL and restart the backend, or cut network access for a moment.
 
-## Variables de entorno
+## Environment variables
 
-Ver `backend/.env.example` y `frontend/.env.example`. Ningún secreto real
-está commiteado — `.env` está en `.gitignore` desde el primer commit.
+See `backend/.env.example` and `frontend/.env.example`. No real secret is
+committed — `.env` has been in `.gitignore` since the first commit.
 
-## Uso de IA
+## AI usage
 
-Este proyecto se construyó con asistencia de Claude (Anthropic) como
-copiloto de código bajo supervisión directa y revisión humana en cada paso:
-generación del scaffold del backend (modelos, schemas, routers, servicios),
-del cliente de tipos de cambio con su lógica de fallback, y del frontend
-(componentes, páginas, cliente API).
+This project was built with assistance from Claude (Anthropic) as a coding
+copilot under direct supervision and human review at every step: scaffolding
+the backend (models, schemas, routers, services), the exchange-rate client
+with its fallback logic, and the frontend (components, pages, API client).
 
-Ejemplo concreto de una corrección real durante el desarrollo: el cliente de
-Frankfurter (`exchange_rate_client.py`) generado inicialmente no seguía
-redirecciones HTTP. La API de Frankfurter responde con un `301` (redirect a
-`https://` vía Cloudflare) en ciertas condiciones de red, y `httpx.get()` no
-sigue redirects por defecto. Al probar el endpoint en vivo, `conversion_status`
-devolvía `UNAVAILABLE` en vez de `LIVE` aun con la API disponible. Se
-diagnosticó con `curl -sL` (verificando que sin `-L` la respuesta era un 301)
-y se corrigió agregando `follow_redirects=True` a la llamada. Sin probar el
-endpoint contra la red real este bug hubiera pasado desapercibido, porque el
-código "se veía correcto" y no fallaba de forma obvia — solo devolvía el peor
-de los tres estados posibles silenciosamente.
+Concrete example of a real fix during development: the initially generated
+Frankfurter client (`exchange_rate_client.py`) didn't follow HTTP redirects.
+Frankfurter's API responds with a `301` (redirect to `https://` via
+Cloudflare) under certain network conditions, and `httpx.get()` doesn't
+follow redirects by default. When testing the endpoint live,
+`conversion_status` came back as `UNAVAILABLE` instead of `LIVE` even though
+the API was reachable. It was diagnosed with `curl -sL` (confirming that
+without `-L` the response was a 301) and fixed by adding
+`follow_redirects=True` to the call. Without testing the endpoint against
+the real network this bug would have gone unnoticed, because the code
+"looked correct" and didn't fail loudly — it silently returned the worst of
+the three possible states.
 
-## Limitaciones conocidas / trabajo futuro
+## Known limitations / future work
 
-Dado el tiempo disponible para esta entrega (~2.5h), se priorizó backend
-sólido (auth, RBAC de servidor, máquina de estados, integración externa con
-fallback, tests) sobre pulido de frontend. Quedó fuera, documentado como
-alcance consciente:
+Given the time available for this submission (~2.5h), a solid backend (auth,
+server-side RBAC, state machine, external integration with fallback, tests)
+was prioritized over frontend polish. Left out, documented as a conscious
+scope decision:
 
-- Paginación de purchase orders en el frontend (el backend sí la soporta).
-- Edición/eliminación de parts y proveedores desde la UI (los endpoints existen).
-- Tests de frontend (Vitest).
-- Historial de movimientos de stock (`stock_movements`) — requeriría una
-  tabla nueva, pensada pero no implementada.
-- Índice parcial o columna generada para acelerar el filtro `low_stock`
-  (ver nota en `docs/schema.md`).
+- Server-side pagination for purchase orders in the frontend (the backend
+  already supports it).
+- ~~Editing/deleting parts and suppliers from the UI~~ — added: inline edit
+  for parts and suppliers, and supplier delete, are implemented in the UI.
+- Frontend tests (Vitest).
+- Stock movement history (`stock_movements`) — would require a new table,
+  designed but not implemented.
+- A partial index or generated column to speed up the `low_stock` filter
+  (see the note in `docs/schema.md`).
