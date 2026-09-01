@@ -19,6 +19,7 @@ export default function PartsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingPart, setEditingPart] = useState<Part | null>(null);
+  const [requestingPart, setRequestingPart] = useState<Part | null>(null);
 
   useEffect(() => {
     getSuppliers().then(setSuppliers).catch(() => {});
@@ -48,15 +49,8 @@ export default function PartsPage() {
       .finally(() => setLoading(false));
   }
 
-  async function handleRequestPO(partId: number) {
-    const qty = prompt("Quantity to request?");
-    if (!qty || Number(qty) <= 0) return;
-    try {
-      await createPurchaseOrder(partId, Number(qty));
-      alert("Purchase order requested.");
-    } catch (err) {
-      alert(extractErrorMessage(err));
-    }
+  function openRequestPO(part: Part) {
+    setRequestingPart(part);
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -93,6 +87,17 @@ export default function PartsPage() {
             load();
           }}
           onCancel={() => setEditingPart(null)}
+        />
+      )}
+
+      {requestingPart && (
+        <RequestPoModal
+          part={requestingPart}
+          onClose={() => setRequestingPart(null)}
+          onDone={() => {
+            setRequestingPart(null);
+            load();
+          }}
         />
       )}
 
@@ -183,7 +188,7 @@ export default function PartsPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => handleRequestPO(p.id)}
+                      onClick={() => openRequestPO(p)}
                       className="text-slate-700 hover:underline text-xs"
                     >
                       Request PO
@@ -307,5 +312,71 @@ function NewPartForm({ suppliers, onCreated }: { suppliers: Supplier[]; onCreate
         {saving ? "Saving..." : "Save Part"}
       </button>
     </form>
+  );
+}
+
+function RequestPoModal({
+  part,
+  onClose,
+  onDone,
+}: {
+  part: Part;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [qty, setQty] = useState("1");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const n = Number(qty);
+    if (!Number.isInteger(n) || n <= 0) {
+      setError("Quantity must be a positive whole number.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await createPurchaseOrder(part.id, n);
+      onDone();
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm space-y-4">
+        <h2 className="text-lg font-semibold text-slate-800">Request purchase order</h2>
+        <p className="text-sm text-gray-600">
+          {part.name} <span className="text-gray-400">({part.sku})</span>
+        </p>
+        <div>
+          <label htmlFor="po-quantity" className="block text-sm font-medium text-gray-700">Quantity</label>
+          <input
+            id="po-quantity"
+            type="number"
+            min="1"
+            step="1"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            className="mt-1 w-full border rounded px-3 py-2 text-sm"
+            autoFocus
+          />
+        </div>
+        {error && <p className="text-red-600 text-sm">{error}</p>}
+        <div className="flex gap-2 justify-end">
+          <button type="button" onClick={onClose} className="border rounded px-3 py-1.5 text-sm">
+            Cancel
+          </button>
+          <button disabled={saving} className="bg-slate-800 text-white rounded px-3 py-1.5 text-sm disabled:opacity-50">
+            {saving ? "Submitting..." : "Submit"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
