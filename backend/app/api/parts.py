@@ -25,6 +25,15 @@ def _to_out(part: Part) -> PartOut:
     )
 
 
+SORTABLE_FIELDS = {
+    "name": Part.name,
+    "sku": Part.sku,
+    "current_stock": Part.current_stock,
+    "reorder_threshold": Part.reorder_threshold,
+    "unit_price": Part.unit_price,
+}
+
+
 @router.get("", response_model=PaginatedParts)
 def list_parts(
     q: str | None = None,
@@ -32,6 +41,7 @@ def list_parts(
     low_stock: bool | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
+    sort: str | None = Query(default=None, description="e.g. name or -unit_price"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -45,7 +55,13 @@ def list_parts(
         query = query.filter(Part.current_stock <= Part.reorder_threshold)
 
     total = query.count()
-    items = query.order_by(Part.id).offset((page - 1) * page_size).limit(page_size).all()
+    order_col = Part.id
+    if sort:
+        field = sort.lstrip("-")
+        col = SORTABLE_FIELDS.get(field)
+        if col is not None:
+            order_col = col.desc() if sort.startswith("-") else col.asc()
+    items = query.order_by(order_col).offset((page - 1) * page_size).limit(page_size).all()
     return PaginatedParts(items=[_to_out(p) for p in items], total=total, page=page, page_size=page_size)
 
 
