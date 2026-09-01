@@ -37,6 +37,20 @@ export async function createPart(payload: any): Promise<Part> {
   return data;
 }
 
+export async function updatePart(id: number, payload: Partial<Part>): Promise<Part> {
+  const { data } = await apiClient.patch(`/api/parts/${id}`, payload);
+  return data;
+}
+
+export async function updateSupplier(id: number, payload: Partial<Supplier>): Promise<Supplier> {
+  const { data } = await apiClient.patch(`/api/suppliers/${id}`, payload);
+  return data;
+}
+
+export async function deleteSupplier(id: number): Promise<void> {
+  await apiClient.delete(`/api/suppliers/${id}`);
+}
+
 export async function getPurchaseOrders(params: { status?: string; page?: number }): Promise<Paginated<PurchaseOrder>> {
   const { data } = await apiClient.get("/api/purchase-orders", { params });
   return data;

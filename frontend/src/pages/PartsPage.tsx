@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getParts, getSuppliers, createPart, createPurchaseOrder } from "../api/endpoints";
+import { getParts, getSuppliers, createPart, createPurchaseOrder, updatePart } from "../api/endpoints";
 import { extractErrorMessage } from "../api/client";
 import type { Part, Supplier } from "../types";
 import { useAuth } from "../auth/AuthContext";
@@ -18,6 +18,7 @@ export default function PartsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingPart, setEditingPart] = useState<Part | null>(null);
 
   useEffect(() => {
     getSuppliers().then(setSuppliers).catch(() => {});
@@ -81,6 +82,17 @@ export default function PartsPage() {
             setShowForm(false);
             load();
           }}
+        />
+      )}
+
+      {editingPart && (
+        <EditPartForm
+          part={editingPart}
+          onDone={() => {
+            setEditingPart(null);
+            load();
+          }}
+          onCancel={() => setEditingPart(null)}
         />
       )}
 
@@ -161,7 +173,15 @@ export default function PartsPage() {
                   <td className="p-3">{p.current_stock}</td>
                   <td className="p-3">{p.reorder_threshold}</td>
                   <td className="p-3">${Number(p.unit_price).toFixed(2)}</td>
-                  <td className="p-3 text-right">
+                  <td className="p-3 text-right space-x-2">
+                    {user?.role === "admin" && (
+                      <button
+                        onClick={() => setEditingPart(p)}
+                        className="text-slate-700 hover:underline text-xs"
+                      >
+                        Edit
+                      </button>
+                    )}
                     <button
                       onClick={() => handleRequestPO(p.id)}
                       className="text-slate-700 hover:underline text-xs"
@@ -186,6 +206,56 @@ export default function PartsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function EditPartForm({ part, onDone, onCancel }: { part: Part; onDone: () => void; onCancel: () => void }) {
+  const [form, setForm] = useState({
+    name: part.name,
+    reorder_threshold: String(part.reorder_threshold),
+    unit_price: String(part.unit_price),
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!form.name) {
+      setError("Name is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updatePart(part.id, {
+        name: form.name,
+        reorder_threshold: Number(form.reorder_threshold),
+        unit_price: form.unit_price as any,
+      });
+      onDone();
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-4 grid gap-3 sm:grid-cols-4 ring-1 ring-slate-300">
+      <p className="sm:col-span-4 text-sm font-medium text-slate-600">Editing: {part.sku}</p>
+      <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="border rounded px-3 py-1.5 text-sm" />
+      <input type="number" placeholder="Reorder threshold" value={form.reorder_threshold} onChange={(e) => setForm({ ...form, reorder_threshold: e.target.value })} className="border rounded px-3 py-1.5 text-sm" />
+      <input type="number" step="0.01" placeholder="Unit price" value={form.unit_price} onChange={(e) => setForm({ ...form, unit_price: e.target.value })} className="border rounded px-3 py-1.5 text-sm" />
+      <div className="flex gap-2">
+        <button disabled={saving} className="flex-1 bg-slate-800 text-white rounded py-1.5 text-sm disabled:opacity-50">
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button type="button" onClick={onCancel} className="flex-1 border rounded py-1.5 text-sm">
+          Cancel
+        </button>
+      </div>
+      {error && <p className="text-red-600 text-sm sm:col-span-4">{error}</p>}
+    </form>
   );
 }
 
