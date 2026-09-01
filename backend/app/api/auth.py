@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,8 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.db.session import get_db
 from app.models import User
 from app.schemas import TokenOut, UserLogin, UserOut, UserRegister
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -22,6 +26,7 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+    logger.info("User registered: id=%s email=%s role=%s", user.id, user.email, user.role.value)
     token = create_access_token(subject=str(user.id), extra_claims={"role": user.role.value})
     return TokenOut(access_token=token, user=UserOut.model_validate(user))
 
@@ -30,10 +35,12 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if user is None or not verify_password(payload.password, user.password_hash):
+        logger.warning("Failed login attempt for email=%s", payload.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": {"code": "INVALID_CREDENTIALS", "message": "Invalid email or password", "details": []}},
         )
+    logger.info("User logged in: id=%s email=%s role=%s", user.id, user.email, user.role.value)
     token = create_access_token(subject=str(user.id), extra_claims={"role": user.role.value})
     return TokenOut(access_token=token, user=UserOut.model_validate(user))
 

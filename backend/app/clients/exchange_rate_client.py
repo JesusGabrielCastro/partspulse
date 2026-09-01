@@ -5,12 +5,15 @@ status enum. This keeps route handlers and services free of any knowledge
 of the external API's shape (see docs/architecture.md, Q14).
 """
 import enum
+import logging
 import time
 from decimal import Decimal, InvalidOperation
 
 import httpx
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -51,13 +54,16 @@ class ExchangeRateClient:
         cached = self._cache.get(key)
 
         if cached is not None and (time.time() - cached.fetched_at) < settings.exchange_cache_ttl_seconds:
+            logger.debug("Exchange rate cache hit: %s -> %s", base, quote)
             return RateResult(cached.rate, ConversionStatus.CACHED, cached.fetched_at)
 
         try:
             rate = self._fetch(base, quote)
             self._cache[key] = _CacheEntry(rate, time.time())
+            logger.info("Exchange rate fetched live: %s -> %s", base, quote)
             return RateResult(rate, ConversionStatus.LIVE, time.time())
-        except (httpx.HTTPError, InvalidOperation, KeyError, ValueError):
+        except (httpx.HTTPError, InvalidOperation, KeyError, ValueError) as exc:
+            logger.warning("Exchange rate fetch failed for %s -> %s: %s", base, quote, exc)
             if cached is not None:
                 return RateResult(cached.rate, ConversionStatus.CACHED, cached.fetched_at)
             return RateResult(None, ConversionStatus.UNAVAILABLE, None)

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +10,14 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 app = FastAPI(title="PartsPulse API", version="0.1.0")
+
+logging.getLogger("partspulse").info("PartsPulse API starting up")
 
 app.add_middleware(
     CORSMiddleware,

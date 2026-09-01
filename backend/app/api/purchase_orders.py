@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,8 @@ from app.db.session import get_db
 from app.models import Part, PurchaseOrder, PurchaseOrderStatus, User
 from app.schemas import PaginatedPurchaseOrders, PurchaseOrderCreate, PurchaseOrderOut
 from app.services.purchase_order_service import IllegalTransitionError, validate_transition
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/purchase-orders", tags=["purchase-orders"])
 
@@ -24,6 +28,7 @@ def _transition(db: Session, po: PurchaseOrder, target: PurchaseOrderStatus) -> 
     try:
         validate_transition(po.status, target)
     except IllegalTransitionError as exc:
+        logger.warning("Illegal PO transition attempted: %s -> %s", exc.current.value, exc.target.value)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -75,6 +80,7 @@ def create_purchase_order(
     db.add(po)
     db.commit()
     db.refresh(po)
+    logger.info("PO #%s created: part=%s qty=%s requested_by=%s", po.id, po.part_id, po.quantity, current_user.id)
     return po
 
 
@@ -82,6 +88,7 @@ def create_purchase_order(
 def approve_purchase_order(po_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     po = _get_po_or_404(db, po_id)
     if po.requested_by == current_user.id:
+        logger.warning("Self-approval blocked for PO #%s by user %s", po_id, current_user.id)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -96,6 +103,7 @@ def approve_purchase_order(po_id: int, db: Session = Depends(get_db), current_us
     po.approved_by = current_user.id
     db.commit()
     db.refresh(po)
+    logger.info("PO #%s APPROVED by admin %s", po.id, current_user.id)
     return po
 
 
@@ -106,15 +114,17 @@ def reject_purchase_order(po_id: int, db: Session = Depends(get_db), current_use
     po.approved_by = current_user.id
     db.commit()
     db.refresh(po)
+    logger.info("PO #%s REJECTED by admin %s", po.id, current_user.id)
     return po
 
 
 @router.post("/{po_id}/order", response_model=PurchaseOrderOut)
-def order_purchase_order(po_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def order_purchase_order(po_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     po = _get_po_or_404(db, po_id)
     po = _transition(db, po, PurchaseOrderStatus.ORDERED)
     db.commit()
     db.refresh(po)
+    logger.info("PO #%s ORDERED by admin %s", po.id, current_user.id)
     return po
 
 
@@ -126,4 +136,5 @@ def receive_purchase_order(po_id: int, db: Session = Depends(get_db), _: User = 
     part.current_stock += po.quantity
     db.commit()
     db.refresh(po)
+    logger.info("PO #%s RECEIVED: part %s stock +%s (now %s)", po.id, po.part_id, po.quantity, part.current_stock)
     return po
