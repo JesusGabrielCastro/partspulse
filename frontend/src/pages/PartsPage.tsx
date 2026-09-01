@@ -315,7 +315,7 @@ function NewPartForm({ suppliers, onCreated }: { suppliers: Supplier[]; onCreate
   );
 }
 
-function RequestPoModal({
+export function RequestPoModal({
   part,
   onClose,
   onDone,

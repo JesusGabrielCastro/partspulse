@@ -77,13 +77,21 @@ Then run `python -m alembic upgrade head` again pointing at Postgres.
 
 ### Tests
 
+Backend — 13 tests: business logic (low-stock, state machine), API
+integration (RBAC, full PO lifecycle), and external integration fallback.
+
 ```bash
 cd backend
 python -m pytest -q
 ```
 
-13 tests: business logic (low-stock, state machine), API integration
-(RBAC, full PO lifecycle), and external integration fallback.
+Frontend — Vitest + Testing Library: low-stock badge rendering and PO
+request form validation.
+
+```bash
+cd frontend
+npm test
+```
 
 ## Architecture
 
@@ -103,6 +111,8 @@ Backend layers:
 - `app/clients/` — isolated external API clients; never imported directly
   from `api/` without going through `services/` or the client itself.
 - `app/core/` — config, security (JWT/bcrypt), auth/RBAC dependencies.
+- Structured logging of key operations and errors (auth, PO transitions,
+  exchange-rate client), configured in `app/main.py`; no secrets are logged.
 
 Frontend:
 - `src/api/` — the only place that calls the backend (axios with a 401
@@ -194,7 +204,6 @@ scope decision:
   already supports it).
 - ~~Editing/deleting parts and suppliers from the UI~~ — added: inline edit
   for parts and suppliers, and supplier delete, are implemented in the UI.
-- Frontend tests (Vitest).
 - Stock movement history (`stock_movements`) — would require a new table,
   designed but not implemented.
 - A partial index or generated column to speed up the `low_stock` filter
