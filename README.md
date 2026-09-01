@@ -63,17 +63,16 @@ npm run dev
 
 Frontend available at `http://localhost:5173`.
 
-### Using Postgres instead of SQLite (optional)
+### Docker (full stack, one command)
 
 ```bash
-docker compose up -d
+docker compose up --build
 ```
 
-Then in `backend/.env` change:
-```
-DATABASE_URL=postgresql+psycopg2://partspulse:partspulse@localhost:5432/partspulse
-```
-Then run `python -m alembic upgrade head` again pointing at Postgres.
+Builds and runs three containers — Postgres, the FastAPI backend, and the
+frontend (built and served by nginx). The backend runs the migrations and
+seeds demo data automatically on startup. Open the app at
+`http://localhost:5173` and Swagger at `http://localhost:8000/docs`.
 
 ### Tests
 
